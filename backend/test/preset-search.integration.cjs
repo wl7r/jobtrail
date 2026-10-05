@@ -108,3 +108,39 @@ test('a superseded check cannot write old results or clear the newer check lease
   const result = await untilFinished(preset.id);
   assert.deepEqual(result.results.map((r) => r.id), ['new']);
 });
+
+test('candidate writes are fenced when ownership changes during database contention', async () => {
+  const preset = await settings.saveSearchPreset({ ...criteria, name: 'Contended' });
+  blocked = true;
+  await runner.start(preset.id);
+  while (!pending.length) await new Promise((resolve) => setTimeout(resolve, 10));
+  const prisma = app.get(PrismaService);
+  let locked;
+  const lockReady = new Promise((resolve) => { locked = resolve; });
+  let replace;
+  const replaceLease = new Promise((resolve) => { replace = resolve; });
+  const contention = prisma.$transaction(async (transaction) => {
+    await transaction.searchPreset.update({ where: { id: preset.id }, data: { lastNewCount: 0 } });
+    locked();
+    await replaceLease;
+    await transaction.searchPreset.update({ where: { id: preset.id }, data: { runningUntil: new Date(0) } });
+  });
+  await lockReady;
+  fixture = { ...fixture, results: [row('stale')], errors: [], has_more: false };
+  respond(pending.shift());
+  const deadline = Date.now() + 2000;
+  let waiting = false;
+  while (Date.now() < deadline) {
+    const [{ total }] = await prisma.$queryRaw`SELECT count(*)::int AS total FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND pid <> pg_backend_pid()`;
+    if (total) { waiting = true; break; }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  replace();
+  await contention;
+  assert.equal(waiting, true, 'collection must reach the contended database write');
+  blocked = false;
+  fixture = { ...fixture, results: [row('current')] };
+  await runner.start(preset.id);
+  const result = await untilFinished(preset.id);
+  assert.deepEqual(result.results.map((r) => r.id), ['current']);
+});
