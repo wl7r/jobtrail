@@ -16,7 +16,7 @@ it('normalizes a name and accepts cleared optional filters at the request bounda
 it.each([
   { name: '   ' }, { country: 'usa' }, { sites: ['manual'] },
   { sites: ['linkedin', 'linkedin'] }, { sites: [] }, { hoursOld: 0 },
-  { hoursOld: '720' }, { isRemote: 'false' }, { jobType: 'unknown' },
+  { hoursOld: '720' }, { hoursOld: 2147483648 }, { isRemote: 'false' }, { jobType: 'unknown' },
 ])('rejects invalid saved search criteria: %p', async (invalid) => {
   await expect(validate({ ...request, ...invalid })).rejects.toMatchObject({ status: 400 });
 });
