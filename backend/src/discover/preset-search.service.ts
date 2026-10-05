@@ -50,16 +50,18 @@ export class PresetSearchService {
     const preset = await this.prisma.searchPreset.findUnique({ where: { id } });
     if (!preset) throw new NotFoundException('Search preset not found');
     const now = new Date();
+    const runningUntil = new Date(now.getTime() + LEASE_MS);
     const claimed = await this.prisma.searchPreset.updateMany({
       where: { id, OR: [{ runningUntil: null }, { runningUntil: { lte: now } }] },
-      data: { runningUntil: new Date(now.getTime() + LEASE_MS) },
+      data: { runningUntil },
     });
-    return claimed.count ? preset : null;
+    return claimed.count ? { ...preset, runningUntil } : null;
   }
 
   private async collect(preset: SearchPreset) {
     const errors = new Map<string, string>();
     let added = 0;
+    const signal = AbortSignal.timeout(LEASE_MS);
     try {
       for (let page = 0; page < MAX_PAGES; page++) {
         const response = await this.discover.search({
@@ -68,14 +70,17 @@ export class PresetSearchService {
           isRemote: preset.isRemote, jobType: preset.jobType ?? undefined,
           includeKeywords: preset.includeKeywords, excludeKeywords: preset.excludeKeywords,
           resultsWanted: PAGE_SIZE, offset: page * PAGE_SIZE,
-        });
+        }, signal);
         for (const error of response.errors) errors.set(error.site, error.message);
-        for (const result of response.results) {
-          if (!result.id || !result.title || !result.company || !result.job_url) continue;
-          const inserted = await this.prisma.searchPresetHit.createMany({ data: [{
+        signal.throwIfAborted();
+        const owner = await this.prisma.searchPreset.findUnique({ where: { id: preset.id }, select: { runningUntil: true } });
+        if (owner?.runningUntil?.getTime() !== preset.runningUntil?.getTime()) return;
+        const candidates = response.results.filter((result) => result.id && result.title && result.company && result.job_url);
+        if (candidates.length) {
+          const inserted = await this.prisma.$transaction((transaction) => transaction.searchPresetHit.createMany({ data: candidates.map((result) => ({
             presetId: preset.id, source: result.site as JobSource, sourceJobId: result.id,
             result: result as unknown as Prisma.InputJsonObject,
-          }], skipDuplicates: true });
+          })), skipDuplicates: true }), { maxWait: 5000, timeout: 5000 });
           added += inserted.count;
         }
         if (!response.has_more) break;
@@ -85,7 +90,7 @@ export class PresetSearchService {
       errors.set('discovery', 'Search could not finish; retained matches remain available.');
     } finally {
       try {
-        await this.prisma.searchPreset.update({ where: { id: preset.id }, data: {
+        await this.prisma.searchPreset.updateMany({ where: { id: preset.id, runningUntil: preset.runningUntil }, data: {
           runningUntil: null, lastCheckedAt: new Date(), lastNewCount: added,
           lastErrors: [...errors].map(([site, message]) => ({ site, message })),
         } });

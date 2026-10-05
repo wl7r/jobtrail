@@ -100,7 +100,7 @@ describe('DiscoverService.search', () => {
       await svc.search({ sites: ['arbetsformedlingen', 'jobadlinks'], searchTerm: 'chef', country: 'denmark' });
       expect(post).toHaveBeenCalledWith('/search', expect.objectContaining({
         site_name: ['arbetsformedlingen', 'jobadlinks'], country: 'denmark',
-      }));
+      }), { signal: undefined });
     } finally {
       create.mockRestore();
     }

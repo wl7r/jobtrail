@@ -90,3 +90,21 @@ test('only opted-in presets run automatically and the native scheduler selects t
   assert.ok(next.every((time) => ['08:00', '17:00'].includes(time)));
   assert.equal(new Set(next).size, 2);
 });
+
+test('a superseded check cannot write old results or clear the newer check lease', async () => {
+  const preset = await settings.saveSearchPreset({ ...criteria, name: 'Superseded' });
+  blocked = true;
+  await runner.start(preset.id);
+  while (!pending.length) await new Promise((resolve) => setTimeout(resolve, 10));
+  // Fixture preparation simulates a persisted lease that expired during an outage.
+  await app.get(PrismaService).searchPreset.update({ where: { id: preset.id }, data: { runningUntil: new Date(0) } });
+  await runner.start(preset.id);
+  while (pending.length < 2) await new Promise((resolve) => setTimeout(resolve, 10));
+  fixture = { ...fixture, results: [row('old')], errors: [], has_more: false };
+  respond(pending.shift());
+  fixture = { ...fixture, results: [row('new')] };
+  respond(pending.shift());
+  blocked = false;
+  const result = await untilFinished(preset.id);
+  assert.deepEqual(result.results.map((r) => r.id), ['new']);
+});

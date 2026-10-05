@@ -46,7 +46,7 @@ export class DiscoverService {
     });
   }
 
-  async search(dto: DiscoverSearchDto) {
+  async search(dto: DiscoverSearchDto, signal?: AbortSignal) {
     try {
       const { data } = await this.http.post<DiscoverResponse>(
         '/search',
@@ -61,6 +61,7 @@ export class DiscoverService {
           is_remote: dto.isRemote,
           job_type: dto.jobType,
         },
+        { signal },
       );
       const results = data.results.filter((result) => matchesCriteria(result, dto));
       return { ...data, results, collected_count: data.results.length, count: results.length };

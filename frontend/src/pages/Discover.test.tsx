@@ -121,3 +121,24 @@ it('checks and reviews durable matches without automatically importing them', as
   fireEvent.click(screen.getByRole('button', { name: '💾 Save to tracker' }));
   await waitFor(() => expect(api.post).toHaveBeenCalledWith('/discover/import', expect.objectContaining({ sourceJobId: 'new1' })));
 });
+
+it('serializes row imports so every completed save receives feedback', async () => {
+  const rows = ['First', 'Second'].map((title, index) => ({ site: 'jobadlinks', id: String(index), title,
+    company: 'Example', location: 'Göteborg', job_url: `https://example.org/job/${index}` }));
+  let completeFirst!: (value: unknown) => void;
+  vi.mocked(api.post).mockResolvedValueOnce({ data: { results: rows, errors: [], has_more: false, cached: false } })
+    .mockImplementationOnce(() => new Promise((resolve) => { completeFirst = resolve; }))
+    .mockResolvedValueOnce({ data: { id: 'saved-second' } });
+  render(<QueryClientProvider client={new QueryClient()}><Discover /></QueryClientProvider>);
+  fireEvent.click(screen.getByLabelText('JobAd Links'));
+  fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+  await screen.findByRole('link', { name: 'First' });
+  fireEvent.click(screen.getAllByRole('button', { name: '💾 Save to tracker' })[0]);
+  await waitFor(() => expect(screen.getAllByRole('button', { name: '💾 Save to tracker' }).every((button) => button.hasAttribute('disabled'))).toBe(true));
+  fireEvent.click(screen.getAllByRole('button', { name: '💾 Save to tracker' })[1]);
+  expect(api.post).toHaveBeenCalledTimes(2);
+  completeFirst({ data: { id: 'saved-first' } });
+  await screen.findByRole('button', { name: '✅ Saved' });
+  fireEvent.click(screen.getByRole('button', { name: '💾 Save to tracker' }));
+  await waitFor(() => expect(screen.getAllByRole('button', { name: '✅ Saved' })).toHaveLength(2));
+});

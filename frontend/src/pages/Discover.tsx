@@ -324,7 +324,7 @@ export function Discover() {
                       {formatSalaryRange(r.min_amount, r.max_amount, r.currency)}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <button className="btn" disabled={imported || !r.company || !r.title} onClick={() => handleImport(r)}>
+                      <button className="btn" disabled={importJob.isPending || imported || !r.company || !r.title} onClick={() => handleImport(r)}>
                         {imported ? '✅ Saved' : '💾 Save to tracker'}
                       </button>
                     </td>
