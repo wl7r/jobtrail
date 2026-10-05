@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
-import { useDiscoverImport, useDiscoverSearch, type DiscoverSearchInput } from '../api/hooks';
+import { useState } from 'react';
+import { useDiscoverImport, useDiscoverSearch, usePresetResults, type DiscoverSearchInput } from '../api/hooks';
 import { formatSalaryRange, isJobType } from '../lib/format';
 import type { DiscoverResult, SearchPresetCriteria } from '../api/types';
 import { SearchPresets } from '../components/SearchPresets';
+import { ApiError } from '../components/ApiError';
 
 const SITES = ['linkedin', 'indeed', 'glassdoor', 'google', 'ziprecruiter', 'arbetsformedlingen', 'jobadlinks'] as const;
 
@@ -36,6 +37,9 @@ export function Discover() {
   const [jobType, setJobType] = useState<string>('');
   const [includeKeywords, setIncludeKeywords] = useState('');
   const [excludeKeywords, setExcludeKeywords] = useState('');
+  const [storedPresetId, setStoredPresetId] = useState<string | null>(null);
+  const stored = usePresetResults(storedPresetId);
+  const [collectedCount, setCollectedCount] = useState(0);
 
   const search = useDiscoverSearch();
   const importJob = useDiscoverImport();
@@ -63,22 +67,26 @@ export function Discover() {
     hoursOld: hoursOld === '' ? undefined : hoursOld,
     isRemote,
     jobType: jobType || undefined,
+    includeKeywords, excludeKeywords,
   });
 
-  const runSearch = async () => {
+  const runSearch = () => {
+    setStoredPresetId(null);
     const query = buildParams(0);
-    const response = await search.mutateAsync(query);
+    search.mutate(query, { onSuccess: (response) => {
     setSubmittedQuery(query);
     setResults(response.results);
+    setCollectedCount(response.collected_count ?? response.results.length);
     setPage(1);
     setCached(response.cached);
     setExhausted(!response.has_more);
     setSourceErrors(response.errors);
+    } });
   };
 
-  const loadMore = async () => {
+  const loadMore = () => {
     if (!submittedQuery) return;
-    const response = await search.mutateAsync({ ...submittedQuery, offset: page * PAGE_SIZE });
+    search.mutate({ ...submittedQuery, offset: page * PAGE_SIZE }, { onSuccess: (response) => {
     // Dedup by (site, id) — JobSpy occasionally repeats a row across offsets, and React would
     // throw a duplicate-key warning if we let it through.
     setResults((prev) => {
@@ -87,31 +95,19 @@ export function Discover() {
       return [...prev, ...next];
     });
     setPage((p) => p + 1);
+    setCollectedCount((previous) => previous + (response.collected_count ?? response.results.length));
     setCached(response.cached);
     setExhausted(!response.has_more);
     setSourceErrors(response.errors);
+    } });
   };
 
-  // Filter the accumulated results client-side. Matches title + company + description
-  // (lowercased) against comma-separated keyword lists. Excludes win.
-  const filteredResults = useMemo(() => {
-    const includes = includeKeywords
-      .toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
-    const excludes = excludeKeywords
-      .toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
-    if (includes.length === 0 && excludes.length === 0) return results;
-    return results.filter((r) => {
-      const haystack = `${r.title ?? ''} ${r.company ?? ''} ${r.description ?? ''}`.toLowerCase();
-      if (excludes.some((kw) => haystack.includes(kw))) return false;
-      if (includes.length > 0 && !includes.some((kw) => haystack.includes(kw))) return false;
-      return true;
-    });
-  }, [results, includeKeywords, excludeKeywords]);
-  const hiddenCount = results.length - filteredResults.length;
+  const filteredResults = storedPresetId ? stored.data?.results ?? [] : results;
+  const visibleErrors = storedPresetId ? stored.data?.preset.lastErrors ?? [] : sourceErrors;
 
-  const handleImport = async (r: DiscoverResult) => {
+  const handleImport = (r: DiscoverResult) => {
     if (!r.company || !r.title) return;
-    await importJob.mutateAsync({
+    importJob.mutate({
       source: r.site,
       sourceJobId: r.id,
       company: r.company,
@@ -124,14 +120,14 @@ export function Discover() {
       remote: r.is_remote ?? undefined,
       description: r.description ?? undefined,
       jobType: isJobType(r.job_type) ? r.job_type : undefined,
-    });
-    setImportedIds((prev) => new Set(prev).add(`${r.site}:${r.id}`));
+    }, { onSuccess: () => setImportedIds((prev) => new Set(prev).add(`${r.site}:${r.id}`)) });
   };
 
-  const hasResults = results.length > 0;
+  const hasResults = filteredResults.length > 0;
   const initialSearch = !hasResults && search.isPending;
 
   const loadPreset = (preset: SearchPresetCriteria) => {
+    setStoredPresetId(null);
     setSites(preset.sites);
     setSearchTerm(preset.searchTerm);
     setLocation(preset.location);
@@ -143,6 +139,7 @@ export function Discover() {
     setExcludeKeywords(preset.excludeKeywords);
     // A different preset starts a fresh result set and pagination context.
     setResults([]);
+    setCollectedCount(0);
     setSourceErrors([]);
     setSubmittedQuery(null);
     search.reset();
@@ -159,7 +156,7 @@ export function Discover() {
       <SearchPresets criteria={{
         sites, searchTerm, location, country, hoursOld: hoursOld === '' ? null : hoursOld,
         isRemote, jobType: isJobType(jobType) ? jobType : null, includeKeywords, excludeKeywords,
-      }} onLoad={loadPreset} searching={search.isPending} />
+      }} onLoad={loadPreset} onReview={(id, preset) => { loadPreset(preset); setStoredPresetId(id); }} searching={search.isPending} />
 
       <div className="card p-4 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -227,7 +224,7 @@ export function Discover() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <label className="text-xs font-medium text-slate-300">
-            Include keywords <span className="text-slate-500 font-normal">(comma-sep, any match keeps it)</span>
+            Include keywords <span className="text-slate-500 font-normal">(titles only; comma-sep, any phrase keeps it)</span>
             <input
               className="input mt-1"
               placeholder="e.g. design, building, architecture"
@@ -236,7 +233,7 @@ export function Discover() {
             />
           </label>
           <label className="text-xs font-medium text-slate-300">
-            Exclude keywords <span className="text-slate-500 font-normal">(comma-sep, any match hides it)</span>
+            Exclude keywords <span className="text-slate-500 font-normal">(titles only; comma-sep, any phrase hides it)</span>
             <input
               className="input mt-1"
               placeholder="e.g. cloud, aws, software, devops"
@@ -254,34 +251,39 @@ export function Discover() {
           </button>
           {hasResults && (
             <span className="text-xs text-slate-400">
-              {hiddenCount > 0
-                ? `Showing ${filteredResults.length} of ${results.length} loaded (${hiddenCount} hidden by filter)`
-                : `${results.length} loaded`}
+              {filteredResults.length} matching adverts{!storedPresetId && ` · ${collectedCount} collected before filters`}
               {cached ? ' · cached' : ''}
-              {exhausted ? ' · all results loaded' : ''}
+              {!storedPresetId && exhausted ? ' · all results loaded' : ''}
             </span>
           )}
         </div>
       </div>
 
       <p className="text-xs text-slate-400">
+        Separate alternative titles and municipalities with semicolons. Multiple titles work with LinkedIn, Platsbanken and JobAd Links.
+        Official sources search all listed municipalities; LinkedIn searches around the first, then JobTrail keeps matching towns.
+        Geography is approximate: check the workplace address and travel time. Keywords filter titles when a search runs.
         Platsbanken and JobAd Links accept exact Swedish municipality names, or a blank location for the selected country.
         JobAd Links does not support remote-only or job-type filters. Swedish job titles often give better matches.
       </p>
-      {sourceErrors.map((error) => (
+      {visibleErrors.map((error) => (
         <div key={error.site} role="status" className="card border-amber-500 p-3 text-sm text-amber-300">
           {SOURCE_LABELS[error.site] ?? error.site}: {error.message}
         </div>
       ))}
       {search.isError && (
         <div className="card border-rejected p-3 text-sm text-rejected">
-          Search failed — the search service could not be reached.
+          <ApiError error={search.error} fallback="Search failed — the search service could not be reached." />
         </div>
       )}
+      {importJob.isError && <ApiError error={importJob.error} fallback="The advert could not be saved to the tracker. Please try again." />}
 
-      {hasResults && filteredResults.length === 0 && (
+      {storedPresetId && <p className="text-sm text-slate-400">Retained matches from saved checks. Adverts may have expired; open the source listing before applying.</p>}
+      {storedPresetId && stored.data && !hasResults && <p className="text-sm text-slate-400">No retained matches yet. Use Check to run this saved preset; source failures appear above.</p>}
+      {storedPresetId && stored.isError && <ApiError error={stored.error} fallback="Retained matches could not be loaded." />}
+      {!storedPresetId && collectedCount > 0 && filteredResults.length === 0 && (
         <div className="card p-4 text-sm text-slate-400">
-          All {results.length} loaded result{results.length === 1 ? '' : 's'} were hidden by the include/exclude filter.
+          All {collectedCount} collected adverts were hidden by the title or municipality filters.
           Loosen the keywords above.
         </div>
       )}
@@ -334,7 +336,7 @@ export function Discover() {
         </div>
       )}
 
-      {hasResults && !exhausted && (
+      {!storedPresetId && collectedCount > 0 && !exhausted && (
         <div className="flex justify-center">
           <button
             className="btn btn-accent"

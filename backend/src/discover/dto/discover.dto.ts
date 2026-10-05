@@ -10,6 +10,7 @@ import {
   IsString,
   Max,
   Min,
+  MaxLength,
 } from 'class-validator';
 import { JobSource, JobType } from '@prisma/client';
 
@@ -30,11 +31,17 @@ export class DiscoverSearchDto {
   @IsIn(DISCOVER_SITES, { each: true })
   sites!: DiscoverSite[];
 
-  @IsString()
+  @IsString() @MaxLength(2000)
   searchTerm!: string;
 
-  @IsOptional() @IsString()
+  @IsOptional() @IsString() @MaxLength(2000)
   location?: string;
+
+  @IsOptional() @IsString() @MaxLength(2000)
+  includeKeywords?: string;
+
+  @IsOptional() @IsString() @MaxLength(2000)
+  excludeKeywords?: string;
 
   @IsOptional() @IsIn(['sweden', 'denmark'])
   country?: 'sweden' | 'denmark';

@@ -3,9 +3,10 @@ import axios, { AxiosInstance } from 'axios';
 import { JobsService } from '../jobs/jobs.service';
 import { CompaniesService } from '../companies/companies.service';
 import { DiscoverImportDto, DiscoverSearchDto } from './dto/discover.dto';
+import { matchesCriteria } from './matching';
 
 // Shape returned by the JobSpy sidecar — keep it loose; the sidecar normalizes the DataFrame.
-interface JobSpyResult {
+export interface JobSpyResult {
   site: string;
   id: string;
   title: string | null;
@@ -19,6 +20,15 @@ interface JobSpyResult {
   currency: string | null;
   date_posted: string | null;
   job_type: string | null;
+}
+
+export interface DiscoverResponse {
+  results: JobSpyResult[];
+  cached: boolean;
+  has_more: boolean;
+  errors: { site: string; message: string }[];
+  count: number;
+  collected_count: number;
 }
 
 @Injectable()
@@ -38,7 +48,7 @@ export class DiscoverService {
 
   async search(dto: DiscoverSearchDto) {
     try {
-      const { data } = await this.http.post<{ results: JobSpyResult[]; cached: boolean }>(
+      const { data } = await this.http.post<DiscoverResponse>(
         '/search',
         {
           site_name: dto.sites,
@@ -52,7 +62,8 @@ export class DiscoverService {
           job_type: dto.jobType,
         },
       );
-      return data;
+      const results = data.results.filter((result) => matchesCriteria(result, dto));
+      return { ...data, results, collected_count: data.results.length, count: results.length };
     } catch (err) {
       const message = axios.isAxiosError(err)
         ? err.response?.data?.detail ?? err.message

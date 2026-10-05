@@ -217,9 +217,14 @@ export interface SearchPresetCriteria {
   jobType: JobType | null;
   includeKeywords: string;
   excludeKeywords: string;
+  automatic?: boolean;
 }
 
 export interface SearchPreset extends SearchPresetCriteria {
   id: string;
   name: string;
+  runningUntil?: string | null;
+  lastCheckedAt?: string | null;
+  lastErrors?: { site: string; message: string }[];
+  lastNewCount?: number;
 }

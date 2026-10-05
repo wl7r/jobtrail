@@ -120,7 +120,7 @@ model UserSettings {
   @@map("user_settings")
 }
 
-// Manually loaded Discover criteria; saving never starts or schedules a search.
+// Saved Discover criteria; scheduled checks are explicitly opt-in.
 model SearchPreset {
   id              String    @id @default(cuid())
   name            String    @unique
@@ -133,10 +133,31 @@ model SearchPreset {
   jobType         JobType?  @map("job_type")
   includeKeywords String    @map("include_keywords")
   excludeKeywords String    @map("exclude_keywords")
+  automatic       Boolean   @default(false)
+  runningUntil    DateTime? @map("running_until")
+  lastCheckedAt   DateTime? @map("last_checked_at")
+  lastErrors      Json      @default("[]") @map("last_errors")
+  lastNewCount    Int       @default(0) @map("last_new_count")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
+  hits            SearchPresetHit[]
 
   @@map("search_presets")
+}
+
+// Candidates stay separate from applications until the operator imports them.
+model SearchPresetHit {
+  id          String       @id @default(cuid())
+  presetId    String       @map("preset_id")
+  source      JobSource
+  sourceJobId String       @map("source_job_id")
+  result      Json
+  firstSeenAt DateTime     @default(now()) @map("first_seen_at")
+  preset      SearchPreset @relation(fields: [presetId], references: [id], onDelete: Cascade)
+
+  @@unique([presetId, source, sourceJobId])
+  @@index([presetId, firstSeenAt])
+  @@map("search_preset_hits")
 }
 
 // Enriched company profile. Populated lazily by the EnrichmentService from free public APIs

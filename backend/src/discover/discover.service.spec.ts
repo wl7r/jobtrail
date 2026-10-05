@@ -71,6 +71,26 @@ describe('DiscoverService.import', () => {
 });
 
 describe('DiscoverService.search', () => {
+  it('matches title phrases and municipalities without excluding description mentions', async () => {
+    const axios = (await import('axios')).default;
+    const post = jest.fn().mockResolvedValue({ data: {
+      cached: false, has_more: true, errors: [], results: [
+        { id: 'keep', title: 'Engineering Director', location: 'Göteborg, Sweden', description: 'Supervise trainee engineers' },
+        { id: 'assistant', title: 'Assistant to Engineering Director', location: 'Göteborg, Sweden' },
+        { id: 'abbreviation', title: 'Coding coordinator', location: 'Göteborg, Sweden' },
+        { id: 'away', title: 'Engineering Director', location: 'Stockholm, Sweden' },
+      ],
+    } });
+    const create = jest.spyOn(axios, 'create').mockReturnValue({ post } as unknown as import('axios').AxiosInstance);
+    try {
+      const service = new DiscoverService({} as JobsService, {} as CompaniesService);
+      const result = await service.search({ sites: ['linkedin'], searchTerm: 'engineering director',
+        location: 'Göteborg; Mölndal', includeKeywords: 'engineering director, co', excludeKeywords: 'assistant, trainee' });
+      expect(result.results.map((r) => r.id)).toEqual(['keep']);
+      expect(result.collected_count).toBe(4);
+      expect(result.has_more).toBe(true);
+    } finally { create.mockRestore(); }
+  });
   it('forwards the selected country and both official sources to the search API', async () => {
     const axios = (await import('axios')).default;
     const post = jest.fn().mockResolvedValue({ data: { results: [], errors: [], has_more: false } });

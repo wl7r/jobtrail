@@ -189,8 +189,14 @@ def search(req: SearchRequest):
 
 
 def _jobspy_results(req: SearchRequest, site: str, proxies: List[str]) -> List[JobResult]:
+    terms = [term.strip() for term in req.search_term.split(';') if term.strip()]
+    if len(terms) > 1 and site != 'linkedin':
+        raise ValueError('Multiple title alternatives are supported by LinkedIn, Platsbanken and JobAd Links; use one term for this source.')
+    if len(terms) > 20:
+        raise ValueError('Use at most 20 title alternatives.')
+    query = ' OR '.join('"' + term.replace('"', '') + '"' for term in terms) if len(terms) > 1 else req.search_term
     df = scrape_jobs(
-        site_name=[site], search_term=req.search_term, location=req.location,
+        site_name=[site], search_term=query, location=(req.location or '').split(';')[0].strip() or None,
         results_wanted=req.results_wanted, offset=req.offset, hours_old=req.hours_old,
         is_remote=req.is_remote or False, job_type=req.job_type, proxies=proxies,
         country_indeed=req.country,

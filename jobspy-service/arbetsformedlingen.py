@@ -30,13 +30,24 @@ def search(source, request, proxies):
     session = create_session(proxies=proxies, is_tls=False)
     session.trust_env = False
     with session:
-        params = {'q': request.search_term, 'limit': request.results_wanted, 'offset': request.offset,
+        terms = [term.strip() for term in request.search_term.split(';') if term.strip()]
+        if len(terms) > 20:
+            raise ValueError('Use at most 20 title alternatives.')
+        # Both official APIs put unprefixed quoted phrases in a should/OR clause.
+        query = ' '.join('"' + term.replace('"', '') + '"' for term in terms) if len(terms) > 1 else request.search_term
+        params = {'q': query, 'limit': request.results_wanted, 'offset': request.offset,
                   'country': _concept(session, 'country', {'sweden': 'Sverige', 'denmark': 'Danmark'}[request.country])}
         if request.location and request.location.strip():
-            parts = [p.strip() for p in request.location.split(',')]
-            if request.country != 'sweden' or len(parts) > 2 or (len(parts) == 2 and parts[1].casefold() not in ['sweden', 'sverige']):
-                raise ValueError('For these sources, use a Swedish municipality or leave Location blank for the selected country.')
-            params['municipality'] = _concept(session, 'municipality', parts[0])
+            locations = [place.strip() for place in request.location.split(';') if place.strip()]
+            if len(locations) > 20:
+                raise ValueError('Use at most 20 municipalities.')
+            municipalities = []
+            for location in locations:
+                parts = [p.strip() for p in location.split(',')]
+                if request.country != 'sweden' or len(parts) > 2 or (len(parts) == 2 and parts[1].casefold() not in ['sweden', 'sverige']):
+                    raise ValueError('For these sources, use Swedish municipalities separated by semicolons, or leave Location blank for the selected country.')
+                municipalities.append(_concept(session, 'municipality', parts[0]))
+            params['municipality'] = list(dict.fromkeys(municipalities))
             # JobTech unions geographic filters: country + municipality widens to all
             # Sweden. A Swedish municipality already establishes the country.
             del params['country']

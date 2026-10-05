@@ -15,10 +15,10 @@ export class SaveSearchPresetDto {
   @IsIn(DISCOVER_SITES, { each: true })
   sites!: DiscoverSite[];
 
-  @IsString()
+  @IsString() @MaxLength(2000)
   searchTerm!: string;
 
-  @IsString()
+  @IsString() @MaxLength(2000)
   location!: string;
 
   @IsIn(['sweden', 'denmark'])
@@ -33,9 +33,12 @@ export class SaveSearchPresetDto {
   @IsOptional() @IsEnum(JobType)
   jobType?: JobType | null;
 
-  @IsString()
+  @IsString() @MaxLength(2000)
   includeKeywords!: string;
 
-  @IsString()
+  @IsString() @MaxLength(2000)
   excludeKeywords!: string;
+
+  @IsOptional() @IsBoolean()
+  automatic?: boolean;
 }

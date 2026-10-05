@@ -41,16 +41,16 @@ The home page. Sortable table of every tracked application.
 
 Search across LinkedIn / Indeed / Glassdoor / Google / ZipRecruiter, Platsbanken and JobAd Links. Identical queries are cached for 10 minutes in the sidecar to avoid rate-limit pain.
 
-- **Saved search presets** — save the current fields under a name, then click that name to load them on any device. Reusing a name replaces its criteria. Presets are stored in the application's database and never run automatically; click **Search** after loading one. Loading a preset clears the previous results and pagination.
+- **Saved search presets** — save the current fields under a name, then click that name to load them on any device. Reusing a name replaces its criteria. Loading clears previous results and pagination. **Check** runs saved criteria and retains candidates separately from the tracker; **Review** opens those retained matches. Opt into automatic checks at 08:00 and 17:00 in the backend's `TZ` timezone (UTC by default). Saving never immediately starts a check. External notifications are off.
 - **Site checkboxes** — pick any subset of the seven sources
-- **Search term** + **location** (free text)
-- **Country** — Sweden or Denmark; official APIs require an exact Swedish municipality or a blank location for the selected country
+- **Search term** + **location** — separate alternative title phrases and Swedish municipalities with semicolons. Multi-title queries work with LinkedIn and the official sources. Official sources search every listed municipality in one request; LinkedIn searches around the first city, and JobTrail filters returned locations against the list. This is approximate geography, not a drive-time filter.
+- **Country** — Sweden or Denmark; official APIs require Swedish municipality names or a blank location for the selected country
 - **Max age** in hours; results load in pages of 25 per source
 - **Remote only** checkbox
 - **Job type** dropdown — passed to JobSpy's native `job_type` param (Full-time / Part-time / Contract / Internship)
-- **Include keywords** *(client-side post-filter)* — comma-separated; if any one matches the title + company + description (case-insensitive substring), the row is kept
-- **Exclude keywords** *(client-side post-filter)* — comma-separated; if any one matches, the row is hidden. **Excludes always win** over includes — handy for "search Junior Architect but hide cloud/aws/devops noise"
-- **Counter** shows `Showing N of M (K hidden by filter)` whenever a filter is active
+- **Include keywords** — comma-separated title phrases; any matching phrase keeps the advert. Matching ignores case, accents and punctuation, with word boundaries for abbreviations.
+- **Exclude keywords** — title phrases; any match hides the advert. Excludes win. Description mentions do not exclude a relevant title. Filters apply when a manual or automatic search runs.
+- **Counter** distinguishes matching adverts from collected adverts before filtering.
 - **Import button** per row — POSTs to `/api/discover/import` which upserts on `(source, sourceJobId)`, auto-resolves a Company row, and kicks off background enrichment. Re-importing the same row refreshes URL/salary/location/description but never overwrites your status or notes.
 
 ### Companies — `/companies`
@@ -434,8 +434,8 @@ results. Official APIs have separate bounded workers from JobSpy, so blocked scr
 not consume their workers. Load more uses the submitted query, even if form fields change.
 Imports deduplicate within each source; they do not group the same vacancy across sources.
 
-Country defaults to Sweden. For official sources, Location accepts an exact Swedish
-municipality, optionally followed by Sweden; leave it blank for the selected country.
+Country defaults to Sweden. For official sources, Location accepts exact Swedish
+municipalities separated by semicolons, each optionally followed by Sweden; leave it blank for the selected country.
 JobAd Links cannot filter remote work or job type. JobSearch supports full-time and
 part-time here. Unsupported filters produce source warnings rather than silently widening
 searches. English role names are not translated; Swedish terms can yield different matches.
@@ -444,6 +444,21 @@ searches. English role names are not translated; Swedish terms can yield differe
 short searches, and each source uses the existing request-level JobSpy proxy rotation.
 This does not add proxy health checks or automatic failover. Empty scraper results remain
 unconfirmed because JobSpy can swallow collection errors.
+
+Automatic checks use the existing NestJS scheduler and PostgreSQL. Checks acquire a
+15-minute database lease to prevent overlapping runs of the same preset. Interrupted
+checks become eligible again when the lease expires. The next scheduled time runs after
+a restart; missed times are not replayed. Each check collects at most five pages of 100
+adverts per source and reports truncation or source failures. Candidates deduplicate by
+preset/source/advert ID and survive restarts; retained adverts can expire at their source.
+They remain separate from applications until explicitly imported. No external notification
+transport or credentials are configured. Expired ingress sign-in redirects offer a
+**Sign in again** action without automatically replaying a failed write.
+
+To exercise the saved-check integration tests, apply migrations to a disposable
+PostgreSQL database named `jobtrail_test`, build the backend, then run
+`DATABASE_URL=<test-database-url> TZ=Europe/Stockholm npm run test:integration` from `backend`.
+The tests refuse other database names and clear saved presets in the test database.
 
 The Dockerfiles extend the original deployed runtime digests and install locked build
 dependencies. Build and test linux/amd64 images locally with:

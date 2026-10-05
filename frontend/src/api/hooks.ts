@@ -147,13 +147,15 @@ export interface DiscoverSearchInput {
   hoursOld?: number;
   isRemote?: boolean;
   jobType?: string;
+  includeKeywords?: string;
+  excludeKeywords?: string;
 }
 
 export function useDiscoverSearch() {
   return useMutation({
     mutationFn: async (input: DiscoverSearchInput) =>
       (
-        await api.post<{ cached: boolean; count: number; results: DiscoverResult[]; has_more: boolean; errors: { site: string; message: string }[] }>(
+        await api.post<{ cached: boolean; count: number; collected_count: number; results: DiscoverResult[]; has_more: boolean; errors: { site: string; message: string }[] }>(
           '/discover/search',
           input,
         )
@@ -173,7 +175,28 @@ export function useSearchPresets() {
   return useQuery({
     queryKey: ['search-presets'],
     queryFn: async () => (await api.get<SearchPreset[]>('/settings/search-presets')).data,
+    refetchInterval: (query) => query.state.data?.some((preset) => preset.runningUntil && new Date(preset.runningUntil) > new Date()) ? 1500 : false,
   });
+}
+
+export function useDiscoveryAutomation() {
+  return useQuery({ queryKey: ['discovery-automation'],
+    queryFn: async () => (await api.get<{ hours: number[]; timezone: string; notifications: boolean }>('/discover/automation')).data });
+}
+
+export function usePresetResults(id: string | null) {
+  return useQuery({ queryKey: ['preset-results', id], enabled: Boolean(id),
+    queryFn: async () => (await api.get<{ preset: SearchPreset; results: DiscoverResult[] }>(`/discover/presets/${id}/results`)).data,
+    refetchInterval: (query) => query.state.data?.preset.runningUntil && new Date(query.state.data.preset.runningUntil) > new Date() ? 1500 : false });
+}
+
+export function useCheckPreset() {
+  const queryClient = useQueryClient();
+  return useMutation({ mutationFn: async (id: string) => (await api.post<{ started: boolean }>(`/discover/presets/${id}/check`)).data,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['search-presets'] });
+      void queryClient.invalidateQueries({ queryKey: ['preset-results'] });
+    } });
 }
 
 export function useSaveSearchPreset() {

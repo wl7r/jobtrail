@@ -106,6 +106,30 @@ class OfficialApiTests(unittest.TestCase):
         self.assertEqual(observed[0]['municipality'], ['oYPt_yRA_Smm'])
         self.assertNotIn('country', observed[0])
 
+    def test_title_alternatives_use_native_queries_and_all_municipalities(self):
+        from urllib.parse import urlparse, parse_qs
+        observed = []
+        def respond(request, **kwargs):
+            if 'taxonomy' not in request.url:
+                observed.append(parse_qs(urlparse(request.url).query))
+            return SearchTests.api_response(request, **kwargs)
+        with patch('requests.Session.send', side_effect=respond), patch('main.scrape_jobs', return_value=pd.DataFrame()) as scrape:
+            result = main.search(main.SearchRequest(site_name=['linkedin', 'arbetsformedlingen', 'jobadlinks'],
+                search_term='engineering director; head of engineering', location='Malmö; Lund'))
+        self.assertEqual(scrape.call_args.kwargs['search_term'], '"engineering director" OR "head of engineering"')
+        self.assertEqual(scrape.call_args.kwargs['location'], 'Malmö')
+        self.assertEqual(len(observed), 2)
+        for params in observed:
+            self.assertEqual(params['q'], ['"engineering director" "head of engineering"'])
+            self.assertEqual(len(params['municipality']), 2)
+            self.assertNotIn('country', params)
+
+    def test_unsupported_multi_title_source_does_not_scrape(self):
+        with patch('main.scrape_jobs') as scrape:
+            result = main.search(main.SearchRequest(site_name=['indeed'], search_term='a; b'))
+        scrape.assert_not_called()
+        self.assertIn('Multiple title alternatives', result.errors[0].message)
+
     def test_jobadlinks_preserves_original_url_missing_fields_and_offset(self):
         import requests, json
         from urllib.parse import urlparse, parse_qs
