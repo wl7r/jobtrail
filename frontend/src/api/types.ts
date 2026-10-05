@@ -4,7 +4,9 @@ export type JobSource =
   | 'indeed'
   | 'glassdoor'
   | 'google'
-  | 'ziprecruiter';
+  | 'ziprecruiter'
+  | 'arbetsformedlingen'
+  | 'jobadlinks';
 
 export type JobStatus =
   | 'saved'

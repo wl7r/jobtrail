@@ -138,6 +138,7 @@ export function useExtractSkills() {
 export interface DiscoverSearchInput {
   sites: string[];
   searchTerm: string;
+  country: 'sweden' | 'denmark';
   location?: string;
   resultsWanted?: number;
   offset?: number;
@@ -150,7 +151,7 @@ export function useDiscoverSearch() {
   return useMutation({
     mutationFn: async (input: DiscoverSearchInput) =>
       (
-        await api.post<{ cached: boolean; count: number; results: DiscoverResult[] }>(
+        await api.post<{ cached: boolean; count: number; results: DiscoverResult[]; has_more: boolean; errors: { site: string; message: string }[] }>(
           '/discover/search',
           input,
         )

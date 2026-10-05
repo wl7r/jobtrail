@@ -69,3 +69,20 @@ describe('DiscoverService.import', () => {
     expect(companies.findOrCreateByNameOrDomain).not.toHaveBeenCalled();
   });
 });
+
+describe('DiscoverService.search', () => {
+  it('forwards the selected country and both official sources to the search API', async () => {
+    const axios = (await import('axios')).default;
+    const post = jest.fn().mockResolvedValue({ data: { results: [], errors: [], has_more: false } });
+    const create = jest.spyOn(axios, 'create').mockReturnValue({ post } as unknown as import('axios').AxiosInstance);
+    try {
+      const svc = new DiscoverService({} as JobsService, {} as CompaniesService);
+      await svc.search({ sites: ['arbetsformedlingen', 'jobadlinks'], searchTerm: 'chef', country: 'denmark' });
+      expect(post).toHaveBeenCalledWith('/search', expect.objectContaining({
+        site_name: ['arbetsformedlingen', 'jobadlinks'], country: 'denmark',
+      }));
+    } finally {
+      create.mockRestore();
+    }
+  });
+});

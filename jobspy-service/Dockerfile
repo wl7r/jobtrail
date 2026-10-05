@@ -1,13 +1,3 @@
-FROM python:3.11-slim
-
-WORKDIR /app
-
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY main.py ./
-
-EXPOSE 8001
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
+FROM docker.io/kaylaehman/jobtrail-jobspy@sha256:6dd05d6de6461f18d0fea68491c4eb2dde27c36a3fa7d9c462f9a06f3bd2de1c
+COPY main.py arbetsformedlingen.py test_search.py ./
+RUN python -m unittest -v test_search

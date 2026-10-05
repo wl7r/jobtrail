@@ -419,3 +419,38 @@ tunnel at `http://frontend:80` instead of `http://<homelab-ip>:3000`.
 ## License
 
 MIT.
+
+## Swedish discovery extension
+
+This fork adds Sweden/Denmark country forwarding, Platsbanken through the
+[official JobSearch API](https://jobsearch.api.jobtechdev.se/), and partner adverts through
+[JobAd Links](https://links.api.jobtechdev.se/). JobAd Links descriptions stay short and
+advert links point to the original listing. No API key is required.
+
+Discover searches sources independently and shows source failures alongside completed
+results. Official APIs have separate bounded workers from JobSpy, so blocked scrapers do
+not consume their workers. Load more uses the submitted query, even if form fields change.
+Imports deduplicate within each source; they do not group the same vacancy across sources.
+
+Country defaults to Sweden. For official sources, Location accepts an exact Swedish
+municipality, optionally followed by Sweden; leave it blank for the selected country.
+JobAd Links cannot filter remote work or job type. JobSearch supports full-time and
+part-time here. Unsupported filters produce source warnings rather than silently widening
+searches. English role names are not translated; Swedish terms can yield different matches.
+
+`JOBSPY_PROXIES` is required for every external search. Starting positions rotate across
+short searches, and each source uses the existing request-level JobSpy proxy rotation.
+This does not add proxy health checks or automatic failover. Empty scraper results remain
+unconfirmed because JobSpy can swallow collection errors.
+
+The Dockerfiles extend the original deployed runtime digests and install locked build
+dependencies. Build and test linux/amd64 images locally with:
+
+```sh
+docker build --platform linux/amd64 -t jobtrail-wl7r-backend:swedish-discovery backend
+docker build --platform linux/amd64 -t jobtrail-wl7r-frontend:swedish-discovery frontend
+docker build --platform linux/amd64 -t jobtrail-wl7r-jobspy:swedish-discovery jobspy-service
+```
+
+Back up PostgreSQL before applying the additive JobSource enum migration. After importing
+the new sources, retain a compatible backend or review a data migration before downgrading.

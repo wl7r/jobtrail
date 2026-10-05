@@ -44,6 +44,7 @@ export class DiscoverService {
           site_name: dto.sites,
           search_term: dto.searchTerm,
           location: dto.location,
+          country: dto.country ?? 'sweden',
           results_wanted: dto.resultsWanted ?? 25,
           offset: dto.offset ?? 0,
           hours_old: dto.hoursOld,

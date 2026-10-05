@@ -1,14 +1,12 @@
-FROM node:20-alpine AS builder
-WORKDIR /app
-ARG VITE_API_URL=http://localhost:8000
+FROM docker.io/kaylaehman/jobtrail-backend@sha256:8625198e72fec0f7e2d28bf1d759d65e5eb7ebbf9dbe89a0b91dfb90c25cb026 AS builder
+WORKDIR /frontend
+ENV NODE_ENV=development
+ARG VITE_API_URL=
 ENV VITE_API_URL=$VITE_API_URL
-COPY package.json package-lock.json* ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci --include=dev
 COPY . .
-RUN npm run build
+RUN npm run build && npm test
 
-FROM nginx:1.27-alpine
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+FROM docker.io/kaylaehman/jobtrail-frontend@sha256:c1b33960a690d8beb9a8ae0e9ace17b47d9fd05513805030ff18fd190e00e055
+COPY --from=builder /frontend/dist /usr/share/nginx/html

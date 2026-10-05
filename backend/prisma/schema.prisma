@@ -17,6 +17,8 @@ enum JobSource {
   glassdoor
   google
   ziprecruiter
+  arbetsformedlingen
+  jobadlinks
 }
 
 enum JobStatus {

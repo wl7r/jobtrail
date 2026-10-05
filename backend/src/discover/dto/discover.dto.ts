@@ -5,6 +5,7 @@ import {
   IsBoolean,
   IsEnum,
   IsInt,
+  IsIn,
   IsOptional,
   IsString,
   Max,
@@ -19,12 +20,14 @@ export const DISCOVER_SITES = [
   JobSource.glassdoor,
   JobSource.google,
   JobSource.ziprecruiter,
+  JobSource.arbetsformedlingen,
+  JobSource.jobadlinks,
 ] as const;
 export type DiscoverSite = (typeof DISCOVER_SITES)[number];
 
 export class DiscoverSearchDto {
-  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(5)
-  @IsEnum(JobSource, { each: true })
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(7)
+  @IsIn(DISCOVER_SITES, { each: true })
   sites!: DiscoverSite[];
 
   @IsString()
@@ -33,11 +36,14 @@ export class DiscoverSearchDto {
   @IsOptional() @IsString()
   location?: string;
 
-  @IsOptional() @IsInt() @Min(1) @Max(200)
+  @IsOptional() @IsIn(['sweden', 'denmark'])
+  country?: 'sweden' | 'denmark';
+
+  @IsOptional() @IsInt() @Min(1) @Max(100)
   resultsWanted?: number;
 
   // For the frontend "Load more" pagination — skip the first N results.
-  @IsOptional() @IsInt() @Min(0)
+  @IsOptional() @IsInt() @Min(0) @Max(2000)
   offset?: number;
 
   @IsOptional() @IsInt() @Min(1)
@@ -51,7 +57,7 @@ export class DiscoverSearchDto {
 }
 
 export class DiscoverImportDto {
-  @IsEnum(JobSource)
+  @IsIn(DISCOVER_SITES)
   source!: DiscoverSite;
 
   @IsString()

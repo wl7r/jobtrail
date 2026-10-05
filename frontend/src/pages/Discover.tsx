@@ -3,7 +3,7 @@ import { useDiscoverImport, useDiscoverSearch, type DiscoverSearchInput } from '
 import { formatSalaryRange, isJobType } from '../lib/format';
 import type { DiscoverResult } from '../api/types';
 
-const SITES = ['linkedin', 'indeed', 'glassdoor', 'google', 'ziprecruiter'] as const;
+const SITES = ['linkedin', 'indeed', 'glassdoor', 'google', 'ziprecruiter', 'arbetsformedlingen', 'jobadlinks'] as const;
 
 // JobSpy uses these strings literally for `job_type`. Map empty → undefined to omit the param.
 const JOB_TYPES = [
@@ -18,13 +18,18 @@ const JOB_TYPES = [
 // the affordance for "show me more"; 25 keeps the table digestible while still covering most
 // fruitful searches in a couple of clicks.
 const PAGE_SIZE = 25;
+const SOURCE_LABELS: Record<string, string> = {
+  arbetsformedlingen: 'Arbetsförmedlingen (Platsbanken)',
+  jobadlinks: 'JobAd Links',
+};
 
 export function Discover() {
-  // All inputs start blank so the user explicitly opts in to every filter — only `hoursOld` keeps
-  // a default (72) because un-bounded JobSpy queries return stale results and rate-limit hard.
+  // Country defaults to Sweden; the 72-hour age limit avoids stale, unbounded scrapes.
   const [sites, setSites] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [location, setLocation] = useState('');
+  const [country, setCountry] = useState<'sweden' | 'denmark'>('sweden');
+  const [sourceErrors, setSourceErrors] = useState<{ site: string; message: string }[]>([]);
   const [hoursOld, setHoursOld] = useState<number | ''>(72);
   const [isRemote, setIsRemote] = useState(false);
   const [jobType, setJobType] = useState<string>('');
@@ -40,6 +45,7 @@ export function Discover() {
   // hits (the upstream is out of matches for these filters), and we hide the Load more button.
   const [results, setResults] = useState<DiscoverResult[]>([]);
   const [page, setPage] = useState(0);
+  const [submittedQuery, setSubmittedQuery] = useState<DiscoverSearchInput | null>(null);
   const [cached, setCached] = useState(false);
   const [exhausted, setExhausted] = useState(false);
 
@@ -49,6 +55,7 @@ export function Discover() {
   const buildParams = (offset: number): DiscoverSearchInput => ({
     sites,
     searchTerm,
+    country,
     location: location || undefined,
     resultsWanted: PAGE_SIZE,
     offset,
@@ -58,15 +65,19 @@ export function Discover() {
   });
 
   const runSearch = async () => {
-    const response = await search.mutateAsync(buildParams(0));
+    const query = buildParams(0);
+    const response = await search.mutateAsync(query);
+    setSubmittedQuery(query);
     setResults(response.results);
     setPage(1);
     setCached(response.cached);
-    setExhausted(response.results.length < PAGE_SIZE);
+    setExhausted(!response.has_more);
+    setSourceErrors(response.errors);
   };
 
   const loadMore = async () => {
-    const response = await search.mutateAsync(buildParams(page * PAGE_SIZE));
+    if (!submittedQuery) return;
+    const response = await search.mutateAsync({ ...submittedQuery, offset: page * PAGE_SIZE });
     // Dedup by (site, id) — JobSpy occasionally repeats a row across offsets, and React would
     // throw a duplicate-key warning if we let it through.
     setResults((prev) => {
@@ -76,7 +87,8 @@ export function Discover() {
     });
     setPage((p) => p + 1);
     setCached(response.cached);
-    setExhausted(response.results.length < PAGE_SIZE);
+    setExhausted(!response.has_more);
+    setSourceErrors(response.errors);
   };
 
   // Filter the accumulated results client-side. Matches title + company + description
@@ -112,7 +124,7 @@ export function Discover() {
       description: r.description ?? undefined,
       jobType: isJobType(r.job_type) ? r.job_type : undefined,
     });
-    setImportedIds((prev) => new Set(prev).add(r.id));
+    setImportedIds((prev) => new Set(prev).add(`${r.site}:${r.id}`));
   };
 
   const hasResults = results.length > 0;
@@ -122,7 +134,7 @@ export function Discover() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Discover</h1>
       <p className="text-sm text-slate-400">
-        Search jobs across LinkedIn, Indeed, Glassdoor, Google, and ZipRecruiter via JobSpy. Identical queries are
+        Search JobSpy sources, Platsbanken, and JobAd Links. Identical queries are
         cached for 10 minutes to avoid rate limits.
       </p>
 
@@ -132,7 +144,7 @@ export function Discover() {
             <label key={s} className="flex items-center gap-1 text-sm">
               <input type="checkbox" checked={sites.includes(s)} onChange={() => toggleSite(s)} />
               <span className="capitalize">
-                {s}{' '}
+                {SOURCE_LABELS[s] ?? s}{' '}
                 {search.isPending && sites.includes(s) && (
                   <span className="inline-block animate-pulse text-slate-400" aria-label="searching">…</span>
                 )}
@@ -141,6 +153,13 @@ export function Discover() {
           ))}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <label className="text-xs font-medium text-slate-300">
+            Country
+            <select className="input mt-1" value={country} onChange={(e) => setCountry(e.target.value as 'sweden' | 'denmark')}>
+              <option value="sweden">Sweden</option>
+              <option value="denmark">Denmark</option>
+            </select>
+          </label>
           <label className="text-xs font-medium text-slate-300">
             Search term
             <input
@@ -154,7 +173,7 @@ export function Discover() {
             Location
             <input
               className="input mt-1"
-              placeholder="e.g. Remote or Boston, MA"
+              placeholder="e.g. Malmö, Sweden"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
             />
@@ -222,9 +241,18 @@ export function Discover() {
         </div>
       </div>
 
+      <p className="text-xs text-slate-400">
+        Platsbanken and JobAd Links accept exact Swedish municipality names, or a blank location for the selected country.
+        JobAd Links does not support remote-only or job-type filters. Swedish job titles often give better matches.
+      </p>
+      {sourceErrors.map((error) => (
+        <div key={error.site} role="status" className="card border-amber-500 p-3 text-sm text-amber-300">
+          {SOURCE_LABELS[error.site] ?? error.site}: {error.message}
+        </div>
+      ))}
       {search.isError && (
         <div className="card border-rejected p-3 text-sm text-rejected">
-          Search failed — the JobSpy sidecar returned an error. Check the backend logs.
+          Search failed — the search service could not be reached.
         </div>
       )}
 
@@ -250,7 +278,7 @@ export function Discover() {
             </thead>
             <tbody>
               {filteredResults.map((r) => {
-                const imported = importedIds.has(r.id);
+                const imported = importedIds.has(`${r.site}:${r.id}`);
                 return (
                   <tr key={`${r.site}-${r.id}`} className="border-t border-slate-700 hover:bg-slate-900/50">
                     <td className="px-3 py-2">
@@ -262,7 +290,7 @@ export function Discover() {
                         r.title ?? '—'
                       )}
                     </td>
-                    <td className="px-3 py-2 capitalize">{r.site}</td>
+                    <td className="px-3 py-2 capitalize">{SOURCE_LABELS[r.site] ?? r.site}</td>
                     <td className="px-3 py-2">{r.company ?? '—'}</td>
                     <td className="px-3 py-2">
                       {r.location ?? '—'} {r.is_remote ? '· 🌐' : ''}
@@ -271,7 +299,7 @@ export function Discover() {
                       {formatSalaryRange(r.min_amount, r.max_amount, r.currency)}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <button className="btn" disabled={imported} onClick={() => handleImport(r)}>
+                      <button className="btn" disabled={imported || !r.company || !r.title} onClick={() => handleImport(r)}>
                         {imported ? '✅ Saved' : '💾 Save to tracker'}
                       </button>
                     </td>
