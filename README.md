@@ -39,11 +39,13 @@ The home page. Sortable table of every tracked application.
 ### Discover — `/discover`
 <img width="2506" height="1303" alt="image" src="https://github.com/user-attachments/assets/9a00a89e-d229-47fb-b875-54e6e5aa1982" />
 
-JobSpy-backed search across LinkedIn / Indeed / Glassdoor / Google / ZipRecruiter. Identical queries are cached for 10 minutes in the sidecar to avoid rate-limit pain.
+Search across LinkedIn / Indeed / Glassdoor / Google / ZipRecruiter, Platsbanken and JobAd Links. Identical queries are cached for 10 minutes in the sidecar to avoid rate-limit pain.
 
-- **Site checkboxes** — pick any subset of the five sources
+- **Saved search presets** — save the current fields under a name, then click that name to load them on any device. Reusing a name replaces its criteria. Presets are stored in the application's database and never run automatically; click **Search** after loading one. Loading a preset clears the previous results and pagination.
+- **Site checkboxes** — pick any subset of the seven sources
 - **Search term** + **location** (free text)
-- **Results wanted** (1–200), **Max age** in hours
+- **Country** — Sweden or Denmark; official APIs require an exact Swedish municipality or a blank location for the selected country
+- **Max age** in hours; results load in pages of 25 per source
 - **Remote only** checkbox
 - **Job type** dropdown — passed to JobSpy's native `job_type` param (Full-time / Part-time / Contract / Internship)
 - **Include keywords** *(client-side post-filter)* — comma-separated; if any one matches the title + company + description (case-insensitive substring), the row is kept

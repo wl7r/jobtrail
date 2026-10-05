@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 import { ResetSettingsDto } from './dto/reset-settings.dto';
+import { SaveSearchPresetDto } from './dto/save-search-preset.dto';
 
 const SINGLETON_ID = 'default';
 
@@ -23,6 +24,18 @@ export class SettingsService {
       where: { id: SINGLETON_ID },
       create: { id: SINGLETON_ID, ...dto },
       update: dto,
+    });
+  }
+
+  getSearchPresets() {
+    return this.prisma.searchPreset.findMany({ orderBy: { createdAt: 'asc' } });
+  }
+
+  saveSearchPreset(dto: SaveSearchPresetDto) {
+    // Omitting an optional filter clears the previous value when replacing a preset.
+    const data = { ...dto, hoursOld: dto.hoursOld ?? null, jobType: dto.jobType ?? null };
+    return this.prisma.searchPreset.upsert({
+      where: { name: dto.name }, create: data, update: data,
     });
   }
 

@@ -120,6 +120,25 @@ model UserSettings {
   @@map("user_settings")
 }
 
+// Manually loaded Discover criteria; saving never starts or schedules a search.
+model SearchPreset {
+  id              String    @id @default(cuid())
+  name            String    @unique
+  sites           JobSource[]
+  searchTerm      String    @map("search_term")
+  location        String
+  country         String
+  hoursOld        Int?      @map("hours_old")
+  isRemote        Boolean   @map("is_remote")
+  jobType         JobType?  @map("job_type")
+  includeKeywords String    @map("include_keywords")
+  excludeKeywords String    @map("exclude_keywords")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@map("search_presets")
+}
+
 // Enriched company profile. Populated lazily by the EnrichmentService from free public APIs
 // (Wikipedia, Wikidata, SEC EDGAR). `domain` and `normalizedName` are both unique so we can
 // dedup by either signal — JobSpy gives us domain inconsistently, so name-match is the fallback.

@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, Patch, Post } from '@nestjs/common';
 import { SettingsService } from './settings.service';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 import { ResetSettingsDto } from './dto/reset-settings.dto';
+import { SaveSearchPresetDto } from './dto/save-search-preset.dto';
 
 @Controller('settings')
 export class SettingsController {
@@ -15,6 +16,17 @@ export class SettingsController {
   @Patch()
   update(@Body() dto: UpdateSettingsDto) {
     return this.settings.update(dto);
+  }
+
+  @Get('search-presets')
+  getSearchPresets() {
+    return this.settings.getSearchPresets();
+  }
+
+  @Post('search-presets')
+  @HttpCode(200)
+  saveSearchPreset(@Body() dto: SaveSearchPresetDto) {
+    return this.settings.saveSearchPreset(dto);
   }
 
   // POST /api/settings/reset — destructive. Caller must include `confirm: "DELETE_ALL_DATA"` in

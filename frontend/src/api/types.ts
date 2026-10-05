@@ -206,3 +206,20 @@ export interface DiscoverResult {
   date_posted: string | null;
   job_type: string | null;
 }
+
+export interface SearchPresetCriteria {
+  sites: string[];
+  searchTerm: string;
+  location: string;
+  country: 'sweden' | 'denmark';
+  hoursOld: number | null;
+  isRemote: boolean;
+  jobType: JobType | null;
+  includeKeywords: string;
+  excludeKeywords: string;
+}
+
+export interface SearchPreset extends SearchPresetCriteria {
+  id: string;
+  name: string;
+}

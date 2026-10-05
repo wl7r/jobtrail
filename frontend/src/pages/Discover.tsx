@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useDiscoverImport, useDiscoverSearch, type DiscoverSearchInput } from '../api/hooks';
 import { formatSalaryRange, isJobType } from '../lib/format';
-import type { DiscoverResult } from '../api/types';
+import type { DiscoverResult, SearchPresetCriteria } from '../api/types';
+import { SearchPresets } from '../components/SearchPresets';
 
 const SITES = ['linkedin', 'indeed', 'glassdoor', 'google', 'ziprecruiter', 'arbetsformedlingen', 'jobadlinks'] as const;
 
@@ -130,6 +131,23 @@ export function Discover() {
   const hasResults = results.length > 0;
   const initialSearch = !hasResults && search.isPending;
 
+  const loadPreset = (preset: SearchPresetCriteria) => {
+    setSites(preset.sites);
+    setSearchTerm(preset.searchTerm);
+    setLocation(preset.location);
+    setCountry(preset.country);
+    setHoursOld(preset.hoursOld ?? '');
+    setIsRemote(preset.isRemote);
+    setJobType(preset.jobType ?? '');
+    setIncludeKeywords(preset.includeKeywords);
+    setExcludeKeywords(preset.excludeKeywords);
+    // A different preset starts a fresh result set and pagination context.
+    setResults([]);
+    setSourceErrors([]);
+    setSubmittedQuery(null);
+    search.reset();
+  };
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Discover</h1>
@@ -137,6 +155,11 @@ export function Discover() {
         Search JobSpy sources, Platsbanken, and JobAd Links. Identical queries are
         cached for 10 minutes to avoid rate limits.
       </p>
+
+      <SearchPresets criteria={{
+        sites, searchTerm, location, country, hoursOld: hoursOld === '' ? null : hoursOld,
+        isRemote, jobType: isJobType(jobType) ? jobType : null, includeKeywords, excludeKeywords,
+      }} onLoad={loadPreset} searching={search.isPending} />
 
       <div className="card p-4 space-y-3">
         <div className="flex flex-wrap items-center gap-2">

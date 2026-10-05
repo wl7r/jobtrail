@@ -12,6 +12,8 @@ import type {
   JobStatus,
   JobType,
   ResetSummary,
+  SearchPreset,
+  SearchPresetCriteria,
   UserSettings,
   WikidataCandidate,
 } from './types';
@@ -164,6 +166,22 @@ export function useSettings() {
     queryKey: ['settings'],
     queryFn: async () => (await api.get<UserSettings>('/settings')).data,
     staleTime: 60_000,
+  });
+}
+
+export function useSearchPresets() {
+  return useQuery({
+    queryKey: ['search-presets'],
+    queryFn: async () => (await api.get<SearchPreset[]>('/settings/search-presets')).data,
+  });
+}
+
+export function useSaveSearchPreset() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: SearchPresetCriteria & { name: string }) =>
+      (await api.post<SearchPreset>('/settings/search-presets', input)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['search-presets'] }),
   });
 }
 
